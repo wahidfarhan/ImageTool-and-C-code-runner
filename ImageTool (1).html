@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Image Tool | Farhan</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- CropperJS -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet"/>
+
+<style>
+/* Scrollbar customization */
+body::-webkit-scrollbar {
+    width: 10px;
+}
+
+body::-webkit-scrollbar-track {
+    background: #161b22; /* dark background */
+    border-radius: 8px;
+}
+
+body::-webkit-scrollbar-thumb {
+    background-color: #1f6feb; /* dark blue thumb */
+    border-radius: 8px;
+    border: 2px solid #161b22;
+}
+
+/* Firefox scrollbar */
+body {
+    scrollbar-width: thin;
+    scrollbar-color: #1f6feb #161b22;
+}
+
+body { margin:0; font-family:Consolas, monospace; background:#1b1b1b; color:#e6edf3; display:flex; justify-content:center; align-items:center; min-height:100vh; }
+.container { width:460px; max-width:95%; background:#161b22; padding:20px; border-radius:12px; box-shadow:0 0 30px rgba(0,0,0,.6); }
+h1 { font-size:20px; text-align:center; margin-bottom:15px; }
+input[type=file], input[type=number], input[type=range] { width:100%; padding:8px; margin:8px 0; background:#0d1117; color:#e6edf3; border:1px solid #30363d; border-radius:6px; }
+.controls { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+button { flex:1; padding:10px; border:none; border-radius:6px; cursor:pointer; background:#238636; color:white; }
+button:hover { background:#2ea043; }
+.secondary { background:#1f6feb; }
+.preview { margin-top:10px; text-align:center; }
+.preview img { max-width:100%; border-radius:8px; border:1px solid #30363d; }
+.download { display:none; margin-top:10px; text-align:center; }
+.download a { color:white; background:#8250df; padding:10px; border-radius:6px; text-decoration:none; display:inline-block; }
+.footer { margin-top:12px; font-size:12px; opacity:.6; text-align:center; }
+label { display:flex; align-items:center; gap:5px; font-size:14px; }
+    :root {
+    --neon-blue: #00bfff; /* Neon blue color */
+}
+
+@keyframes bluePulse {
+    0% {
+        text-shadow:
+            0 0 6px var(--neon-blue),
+            0 0 14px var(--neon-blue),
+            0 0 28px rgba(0, 191, 255, 0.8);
+        opacity: 0.9;
+    }
+    50% {
+        text-shadow:
+            0 0 12px var(--neon-blue),
+            0 0 28px var(--neon-blue),
+            0 0 56px rgba(0, 191, 255, 0.9),
+            0 0 96px rgba(0, 191, 255, 0.7);
+        opacity: 1;
+    }
+    100% {cr
+        text-shadow:
+            0 0 6px var(--neon-blue),
+            0 0 14px var(--neon-blue),
+            0 0 28px rgba(0, 191, 255, 0.8);
+        opacity: 0.9;
+    }
+}
+
+.glow-blue {
+    color: #eaf6ff; /* text color */
+    animation: bluePulse 2.4s infinite ease-in-out;
+}
+
+</style>
+</head>
+
+<body>
+<div class="container">
+    <h1 class=glow-blue>IMAGE TOOL</h1>
+
+    <input type="file" id="imageInput" accept="image/*">
+
+    <div class="preview">
+        <img id="image" style="display:none;">
+    </div>
+
+    <div class="controls">
+        <input type="number" id="width" placeholder="Width (px)">
+        <input type="number" id="height" placeholder="Height (px)">
+    </div>
+
+    <div class="controls">
+        <label><input type="checkbox" id="aspectRatio"> Maintain Aspect Ratio</label>
+    </div>
+
+    <div class="controls">
+        <label>Compression: <span id="compressionValue">90%</span>
+            <input type="range" id="compressionSlider" min="10" max="100" value="90">
+        </label>
+    </div>
+
+    <div class="controls">
+        <button onclick="cropImage()">Crop/Resize</button>
+        
+        <button class="secondary" onclick="removeBGDirect()">Remove BG</button>
+    </div>
+
+    <div class="preview" id="result"></div>
+
+    <div class="download">
+        <a id="downloadLink" download="final.png">Download Image</a>
+    </div>
+
+    <div class="footer">Created by Farhan</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
+<script>
+let cropper;
+let finalBlob = null;
+let compressionRatio = 0.9;
+
+const image = document.getElementById("image");
+const input = document.getElementById("imageInput");
+const aspectCheckbox = document.getElementById("aspectRatio");
+const compressionSlider = document.getElementById("compressionSlider");
+const compressionValue = document.getElementById("compressionValue");
+
+compressionSlider.addEventListener("input", ()=>{
+    compressionRatio = compressionSlider.value/100;
+    compressionValue.textContent = compressionSlider.value + "%";
+});
+
+input.addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    image.src = URL.createObjectURL(file);
+    image.style.display = "block";
+
+    if (cropper) cropper.destroy();
+
+    cropper = new Cropper(image, {
+        viewMode:1,
+        autoCropArea:1,
+        responsive:true,
+        aspectRatio: aspectCheckbox.checked ? 1 : NaN
+    });
+});
+
+aspectCheckbox.addEventListener("change", ()=>{
+    if(cropper){
+        cropper.setAspectRatio(aspectCheckbox.checked ? 1 : NaN);
+    }
+});
+
+function cropImage() {
+    if (!cropper) return;
+
+    const w = parseInt(document.getElementById("width").value) || undefined;
+    const h = parseInt(document.getElementById("height").value) || undefined;
+
+    const cropData = cropper.getData(true);
+    const canvas = document.createElement("canvas");
+
+    canvas.width = w || cropData.width;
+    canvas.height = h || cropData.height;
+
+    const ctx = canvas.getContext("2d");
+
+    ctx.drawImage(
+        image,
+        cropData.x, cropData.y, cropData.width, cropData.height,
+        0, 0, canvas.width, canvas.height
+    );
+
+    canvas.toBlob(blob => {
+        finalBlob = blob;
+        const url = URL.createObjectURL(blob);
+        document.getElementById("result").innerHTML = `<img src="${url}">`;
+        const dl = document.getElementById("downloadLink");
+        dl.href = url;
+        document.querySelector(".download").style.display = "block";
+    }, 'image/jpeg', compressionRatio);
+}
+
+// Normal BG remove (after crop)
+async function removeBackground() {
+    if (!finalBlob) {
+        alert("Crop image first");
+        return;
+    }
+    await removeBGAPI(finalBlob);
+}
+
+// Direct BG remove without crop
+async function removeBGDirect() {
+    const file = input.files[0];
+    if(!file) { alert("Select image first"); return; }
+    await removeBGAPI(file);
+}
+
+// Remove.bg API call
+async function removeBGAPI(blobFile){
+    const formData = new FormData();
+    formData.append("image_file", blobFile);
+    formData.append("size", "auto");
+
+    document.getElementById("result").innerHTML = "Processing...";
+
+    try{
+        const res = await fetch("https://api.remove.bg/v1.0/removebg",{
+            method:"POST",
+            headers: {"X-Api-Key":"Mj7QFRPXmeqLhUKoqx6UH6gp"},
+            body: formData
+        });
+
+        if(!res.ok) throw new Error("Remove.bg failed");
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+
+        document.getElementById("result").innerHTML = `<img src="${url}">`;
+        const dl = document.getElementById("downloadLink");
+        dl.href = url;
+        document.querySelector(".download").style.display = "block";
+    } catch(err){
+        document.getElementById("result").innerHTML = "Error: "+err;
+    }
+}
+</script>
+</body>
+</html>

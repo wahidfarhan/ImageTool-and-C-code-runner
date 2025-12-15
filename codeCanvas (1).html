@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Professional C IDE with Auto-complete & Auto-save</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/material-darker.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/hint/show-hint.min.css">
+
+<style>
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #1e1e1e;
+  color: #fff;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Autocomplete suggestion box */
+.CodeMirror-hints {
+    background: #1e1e1e !important;
+    color: #ffffff !important;
+    border: 1px solid #444 !important;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+    max-height: 200px;
+    overflow-y: auto;
+    border-radius: 5px;
+    z-index: 1000;
+}
+.CodeMirror-hint-active,
+.CodeMirror-hints li:hover {
+    background: #0e639c !important;
+    color: #ffffff !important;
+}
+.CodeMirror-hints li {
+    color: #ffffff !important;
+}
+
+#editor-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 10px;
+}
+
+.CodeMirror {
+  height: 100%;
+  border-radius: 6px;
+  border: 1px solid #444;
+}
+
+#controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#controls-left button {
+  background: #3c3c3c;
+  border: 1px solid #555;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 4px;
+}
+#controls-left button:hover { background: #505050; }
+
+#runButton {
+  padding: 10px 22px;
+  border: none;
+  background: #0e639c;
+  color: white;
+  cursor: pointer;
+  border-radius: 5px;
+  font-weight: bold;
+}
+#runButton:hover { background: #1177bb; }
+
+#inputArea {
+  height: 80px;
+  background: #252526;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 8px;
+  font-family: monospace;
+  color: #d4d4d4;
+  resize: vertical;
+}
+
+#output {
+  height: 200px;
+  background: #252526;
+  border-top: 2px solid #444;
+  padding: 10px;
+  font-family: monospace;
+  overflow: auto;
+  color: #d4d4d4;
+  border-radius: 6px;
+}
+
+#typingEffect {
+  text-align: center;
+  margin: 10px 0;
+  font-size: 16px;
+  color: #0e639c;
+  font-weight: bold;
+  height: 24px;
+}
+</style>
+</head>
+<body>
+
+<div id="editor-container">
+
+<textarea id="editor-textarea">
+#include <stdio.h>
+
+int main() {
+    int x;
+    scanf("%d", &x);
+    printf("You entered: %d\n", x);
+    return 0;
+}
+</textarea>
+
+<div id="controls">
+  <div id="controls-left">
+    <button id="fontMinus">A−</button>
+    <button id="fontPlus">A+</button>
+    <button id="toggleLineNumbers">Toggle Line Numbers</button>
+  </div>
+  <button id="runButton">Run C Code</button>
+</div>
+
+<textarea id="inputArea" placeholder="Enter input here (stdin)"></textarea>
+<div id="output">Output will appear here...</div>
+<div id="typingEffect"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/clike/clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/hint/show-hint.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/hint/anyword-hint.min.js"></script>
+
+<script>
+// C Keywords List
+const cKeywords = [
+  "auto","break","case","char","const","continue","default","do","double","else",
+  "enum","extern","float","for","goto","if","inline","int","long","register","restrict",
+  "return","short","signed","sizeof","static","struct","switch","typedef","union",
+  "unsigned","void","volatile","while","_Alignas","_Alignof","_Atomic","_Bool",
+  "_Complex","_Generic","_Imaginary","_Noreturn","_Static_assert","_Thread_local","printf","scanf"
+];
+
+// Initialize CodeMirror
+const editor = CodeMirror.fromTextArea(document.getElementById("editor-textarea"), {
+  mode: "text/x-csrc",
+  theme: "material-darker",
+  lineNumbers: true,
+  matchBrackets: true,
+  autoCloseBrackets: true,
+  smartIndent: true,
+  electricChars: true,
+  indentWithTabs: true,
+  extraKeys: { "Ctrl-Space": "autocomplete", "Tab": "indentMore", "Shift-Tab": "indentLess" }
+});
+
+// AUTO-SAVE CODE
+const savedCode = localStorage.getItem("userCode");
+if(savedCode) editor.setValue(savedCode);
+editor.on("change", function(cm){ localStorage.setItem("userCode", cm.getValue()); });
+
+// AUTO-SAVE INPUT
+const inputArea = document.getElementById("inputArea");
+const savedInput = localStorage.getItem("userInput");
+if(savedInput) inputArea.value = savedInput;
+inputArea.addEventListener("input", ()=>{ localStorage.setItem("userInput", inputArea.value); });
+
+// Auto-complete hint function
+function cHint(cm){
+  const cur = cm.getCursor();
+  const token = cm.getTokenAt(cur);
+  const start = token.start;
+  const end = cur.ch;
+  const word = token.string.slice(0, end-start);
+  const list = cKeywords.filter(k=>k.startsWith(word));
+  return { list:list.length?list:cKeywords, from: CodeMirror.Pos(cur.line, start), to: CodeMirror.Pos(cur.line, end) };
+}
+CodeMirror.registerHelper("hint", "c", cHint);
+editor.on("inputRead", function(cm, change) {
+  if (!cm.state.completionActive && change.text[0].match(/[a-zA-Z_]/)) {
+    cm.showHint({hint: CodeMirror.hint.c, completeSingle: false});
+  }
+});
+
+// FONT SIZE CONTROL
+let fontSize = 14;
+const MIN_FONT = 10, MAX_FONT = 28;
+function updateFontSize() { editor.getWrapperElement().style.fontSize = fontSize + "px"; editor.refresh(); }
+document.getElementById("fontPlus").onclick = ()=>{if(fontSize<MAX_FONT) fontSize++; updateFontSize();}
+document.getElementById("fontMinus").onclick = ()=>{if(fontSize>MIN_FONT) fontSize--; updateFontSize();}
+
+// CTRL + MOUSE WHEEL ZOOM
+editor.getWrapperElement().addEventListener("wheel", (e)=>{
+  if(e.ctrlKey){ e.preventDefault(); if(e.deltaY<0 && fontSize<MAX_FONT) fontSize++; if(e.deltaY>0 && fontSize>MIN_FONT) fontSize--; updateFontSize();}
+},{ passive:false});
+updateFontSize();
+
+// TOGGLE LINE NUMBERS
+let lineNumbersEnabled = true;
+document.getElementById("toggleLineNumbers").onclick = ()=>{
+  lineNumbersEnabled = !lineNumbersEnabled;
+  editor.setOption("lineNumbers", lineNumbersEnabled);
+  editor.refresh();
+};
+
+// RUN C CODE (Even if input empty)
+document.getElementById("runButton").addEventListener("click", async ()=>{
+  const code = editor.getValue();
+  let userInput = inputArea.value;
+  if(!userInput) userInput = ""; // empty input handled
+  const output = document.getElementById("output");
+  output.innerHTML = "Running...";
+
+  try{
+    const response = await fetch("https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "X-RapidAPI-Host":"judge0-ce.p.rapidapi.com",
+        "X-RapidAPI-Key":"2ffb7c9968msh2aaee0147c376edp10350djsne858c3d03a02"
+      },
+      body: JSON.stringify({ language_id:50, source_code:code, stdin: userInput })
+    });
+    const result = await response.json();
+    if(result.stdout){ output.innerHTML=`<span style="color:#6A9955">${result.stdout}</span>`; }
+    else if(result.stderr){ output.innerHTML=`<span style="color:#f44747">${result.stderr}</span>`; }
+    else{ output.innerHTML="No output"; }
+  }catch(err){ output.innerHTML="Error: "+err; }
+});
+
+// TYPING EFFECT
+const text = "Created by Farhan, The C IDE Master";
+let index = 0;
+function typeEffect() {
+  const el = document.getElementById("typingEffect");
+  if(index < text.length){
+    el.textContent += text.charAt(index);
+    index++;
+    setTimeout(typeEffect, 100);
+  }
+}
+typeEffect();
+</script>
+
+</body>
+</html>
